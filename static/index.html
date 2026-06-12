@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Fingerprinting</title>
+    <!-- Pico CSS - minimal CSS framework -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <!-- Alpine.js - minimal reactive framework -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        body {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .results-table {
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .prediction-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            text-align: center;
+        }
+        
+        .prediction-main {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .prediction-confidence {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+        
+        .top-predictions {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .top-predictions h4 {
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+        
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+        
+        .prediction-info {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin-top: 0.5rem;
+            text-align: center;
+            font-size: 0.9rem;
+        }        
+    </style>
+</head>
+<body>
+    <main class="container" x-data="app()">
+        <h1>CSE406: Website Fingerprinting</h1>
+        
+        <div class="button-group">
+            <button @click="collectLatencyData()" :disabled="isCollecting">Collect Latency Data</button>
+            <button @click="collectTraceData()" :disabled="isCollecting">Collect Trace</button>
+            <button @click="downloadTraces()" :disabled="isCollecting">Download Traces</button>
+            <button @click="clearResults()" :disabled="isCollecting">Clear all results</button>
+        </div>
+        
+        <div x-show="status" role="alert" x-text="status" 
+             :class="{'alert-success': !statusIsError, 'alert-error': statusIsError}"></div>
+        
+        <!-- Real-time Website Prediction -->
+        <template x-if="latestPrediction">
+            <div class="prediction-box">
+                <div class="prediction-main">
+                    Predicted Website: <span x-text="latestPrediction.predicted_website"></span>
+                </div>
+                <div class="prediction-confidence">
+                    Confidence: <span x-text="(latestPrediction.confidence * 100).toFixed(1)"></span>%
+                </div>
+                <template x-if="latestPrediction.top_predictions && latestPrediction.top_predictions.length > 1">
+                    <div class="top-predictions">
+                        <h4>Top Predictions:</h4>
+                        <template x-for="pred in latestPrediction.top_predictions" :key="pred.website">
+                            <div class="prediction-item">
+                                <span x-text="pred.website"></span>
+                                <span x-text="(pred.confidence * 100).toFixed(1) + '%'"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </template>
+        
+        <!-- Latency Results Table -->
+        <template x-if="latencyResults && !showingTraces">
+            <div class="results-container">
+                <h3>Latency Results</h3>
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>N</th>
+                            <th>Median Access Latency (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(time, n) in latencyResults" :key="n">
+                            <tr>
+                                <td x-text="n"></td>
+                                <td x-text="time.toFixed(2)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+        
+        <!-- Heatmap gallery for all traces -->
+        <template x-if="heatmaps.length > 0 && showingTraces">
+            <div class="heatmap-gallery">
+                <h3>Trace Heatmaps</h3>
+                <p>Trace data collected and visualized using matplotlib.</p>
+                <div class="heatmaps-container">
+                    <template x-for="(heatmap, index) in heatmaps" :key="index">
+                        <div class="heatmap-item">
+                            <img :src="heatmap.image" alt="Trace Heatmap" class="heatmap-image" />
+                            <h4 x-text="'Min: ' + (heatmap.stats?.min !== undefined ? heatmap.stats.min : 'N/A') + 
+                                      ', Max: ' + (heatmap.stats?.max !== undefined ? heatmap.stats.max : 'N/A') + 
+                                      ', Range: ' + (heatmap.stats?.range !== undefined ? heatmap.stats.range : 'N/A') + 
+                                      ', Samples: ' + (heatmap.stats?.samples !== undefined ? heatmap.stats.samples : 'N/A')"></h4>
+                            <template x-if="heatmap.prediction">
+                                <div class="prediction-info">
+                                    <strong>Predicted: </strong><span x-text="heatmap.prediction.predicted_website"></span>
+                                    <strong> (</strong><span x-text="(heatmap.prediction.confidence * 100).toFixed(1)"></span><strong>%)</strong>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </main>
+
+    <script src="index.js"></script>
+    <script>
+        // Initialize app by fetching existing results when page loads
+        document.addEventListener('alpine:init', () => {
+            window.Alpine.store('app').fetchResults();
+        });
+    </script>
+</body>
+</html>
